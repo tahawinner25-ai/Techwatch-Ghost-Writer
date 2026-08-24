@@ -36,3 +36,56 @@ graph TD
     E --> F[Firebase Firestore + Google Auth]
     E --> G[Google Workspace: Drive, Docs, Calendar]
     E --> H[Multi-Format Exporters: PDF, DOCX, HTML, MD]
+Core Stack
+Frontend: React 18, TypeScript, Tailwind CSS, Vite, Framer Motion (motion/react), Lucide React.
+Visuals & Charts: Mermaid.js, Recharts, Canvas Confetti.
+AI & Grounding: @google/genai (Gemini 2.5 Flash / Gemini 3.7 Flash) with Google Search Tool Grounding.
+Backend: Node.js, Express, RESTful /api endpoints.
+Database & Auth: Firebase Firestore, Firebase Authentication (Google OAuth 2.0).
+Document Generation: docx, jspdf, html2canvas.
+🚀 Getting Started
+Prerequisites
+Node.js (v18+ or v20+)
+npm or pnpm
+Google Gemini API Key
+Firebase Project with Firestore and Google Authentication enabled
+Installation
+Clone the repository:
+code
+Bash
+git clone https://github.com/your-username/ghostwriter-tech-watch.git
+cd ghostwriter-tech-watch
+Install dependencies:
+code
+Bash
+npm install
+Configure Environment Variables:
+Create a .env file in the root directory:
+code
+Env
+GEMINI_API_KEY=your_gemini_api_key_here
+Start the Development Server:
+code
+Bash
+npm run dev
+Open http://localhost:3000 in your browser.
+Build for Production:
+code
+Bash
+npm run build
+npm start
+🔒 Security & Firestore Rules
+User data and newsletters are partitioned by authenticated UID:
+code
+JavaScript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+
+code
+Code
