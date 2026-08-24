@@ -1,0 +1,6 @@
+{
+  "name": "TechWatch Ghostwriter",
+  "description": "Agent autonome de veille technologique et rédaction senior de newsletters d'ingénierie et d'innovation prêtes à l'envoi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

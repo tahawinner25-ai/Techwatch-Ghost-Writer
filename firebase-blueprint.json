@@ -1,0 +1,142 @@
+{
+  "entities": {
+    "Newsletter": {
+      "title": "Newsletter",
+      "description": "A generated tech watch newsletter edition saved by a user",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the author"
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Subject line of the newsletter"
+        },
+        "preheader": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Email preheader preview text"
+        },
+        "editorialIntro": {
+          "type": "string",
+          "maxLength": 3000,
+          "description": "Editorial introduction text"
+        },
+        "takeaway": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Key strategic takeaway for engineering leaders"
+        },
+        "dateStr": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Publication date display string"
+        },
+        "html": {
+          "type": "string",
+          "maxLength": 500000,
+          "description": "Responsive HTML email markup"
+        },
+        "targetAudience": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Target audience persona"
+        },
+        "styleTemplate": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Email visual design template identifier"
+        },
+        "totalItemsAnalyzed": {
+          "type": "number",
+          "description": "Count of raw data items scanned by AI"
+        },
+        "rejectedItemsCount": {
+          "type": "number",
+          "description": "Count of noise/marketing items rejected"
+        },
+        "innovationsCount": {
+          "type": "number",
+          "description": "Count of core innovations validated"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["userId", "subject", "html", "createdAt"]
+    },
+    "ScheduledNewsletter": {
+      "title": "ScheduledNewsletter",
+      "description": "A scheduled tech watch newsletter queued for future dispatch with Google Calendar synchronization",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the author"
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Subject line of the newsletter"
+        },
+        "scheduledFor": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Target scheduled dispatch date-time ISO string"
+        },
+        "targetRecipientsGroup": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Target audience or distribution list"
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Scheduling status (PENDING, SENT, CANCELLED)"
+        },
+        "googleCalendarEventId": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Associated Google Calendar Event ID"
+        },
+        "googleCalendarEventLink": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "HTML link to the Google Calendar event"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Editorial or dispatch notes"
+        },
+        "html": {
+          "type": "string",
+          "maxLength": 500000,
+          "description": "HTML markup of the newsletter"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["userId", "subject", "scheduledFor", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/newsletters/{newsletterId}": {
+      "schema": "Newsletter",
+      "description": "User's saved newsletter editions with filtering reports and HTML drafts"
+    },
+    "/users/{userId}/scheduledNewsletters/{scheduledId}": {
+      "schema": "ScheduledNewsletter",
+      "description": "Queued newsletter drafts scheduled for future automated/calendar publication"
+    }
+  }
+}

@@ -1,0 +1,90 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection validation endpoint
+    match /test/connection {
+      allow read: if request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidNewsletter(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.subject is string &&
+             data.subject.size() > 0 &&
+             data.subject.size() <= 300 &&
+             data.html is string &&
+             data.html.size() > 0 &&
+             data.html.size() <= 500000 &&
+             (!('preheader' in data) || (data.preheader is string && data.preheader.size() <= 500)) &&
+             (!('editorialIntro' in data) || (data.editorialIntro is string && data.editorialIntro.size() <= 3000)) &&
+             (!('takeaway' in data) || (data.takeaway is string && data.takeaway.size() <= 2000)) &&
+             (!('dateStr' in data) || (data.dateStr is string && data.dateStr.size() <= 100)) &&
+             (!('targetAudience' in data) || (data.targetAudience is string && data.targetAudience.size() <= 100)) &&
+             (!('styleTemplate' in data) || (data.styleTemplate is string && data.styleTemplate.size() <= 50)) &&
+             (!('totalItemsAnalyzed' in data) || (data.totalItemsAnalyzed is number && data.totalItemsAnalyzed >= 0)) &&
+             (!('rejectedItemsCount' in data) || (data.rejectedItemsCount is number && data.rejectedItemsCount >= 0)) &&
+             (!('innovationsCount' in data) || (data.innovationsCount is number && data.innovationsCount >= 0)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    // User Newsletter documents
+    match /users/{userId}/newsletters/{newsletterId} {
+      allow get: if isOwner(userId) && isValidId(newsletterId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(newsletterId) && isValidNewsletter(request.resource.data);
+      allow update: if isOwner(userId) && isValidId(newsletterId) &&
+                       isValidNewsletter(request.resource.data) &&
+                       request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner(userId) && isValidId(newsletterId);
+    }
+
+    function isValidScheduledNewsletter(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.subject is string &&
+             data.subject.size() > 0 &&
+             data.subject.size() <= 300 &&
+             data.scheduledFor is string &&
+             data.scheduledFor.size() > 0 &&
+             data.scheduledFor.size() <= 100 &&
+             data.status is string &&
+             data.status.size() <= 50 &&
+             (!('targetRecipientsGroup' in data) || (data.targetRecipientsGroup is string && data.targetRecipientsGroup.size() <= 200)) &&
+             (!('googleCalendarEventId' in data) || (data.googleCalendarEventId is string && data.googleCalendarEventId.size() <= 200)) &&
+             (!('googleCalendarEventLink' in data) || (data.googleCalendarEventLink is string && data.googleCalendarEventLink.size() <= 500)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+             (!('html' in data) || (data.html is string && data.html.size() <= 500000)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64));
+    }
+
+    // User Scheduled Newsletters (Queue)
+    match /users/{userId}/scheduledNewsletters/{scheduledId} {
+      allow get: if isOwner(userId) && isValidId(scheduledId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(scheduledId) && isValidScheduledNewsletter(request.resource.data);
+      allow update: if isOwner(userId) && isValidId(scheduledId) &&
+                       isValidScheduledNewsletter(request.resource.data) &&
+                       request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner(userId) && isValidId(scheduledId);
+    }
+  }
+}
