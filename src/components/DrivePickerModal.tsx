@@ -4,16 +4,15 @@ import {
   Search,
   FileText,
   RefreshCw,
-  FileCode,
   HardDrive,
   Download,
   AlertCircle,
-  ExternalLink,
-  CheckCircle2,
-  LogIn,
+  Upload,
+  FileUp,
 } from "lucide-react";
 import { DriveFile } from "../types";
 import { listDriveFiles, getDriveFileContent } from "../lib/driveService";
+import { requestWorkspaceToken } from "../lib/firebase";
 import { User } from "firebase/auth";
 
 interface DrivePickerModalProps {
@@ -29,22 +28,23 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({
   isOpen,
   onClose,
   onSelectContent,
-  accessToken,
-  currentUser,
-  onLogin,
+  accessToken: initialToken,
 }) => {
+  const [token, setToken] = useState<string | null>(initialToken);
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState<string | null>(null);
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchFiles = useCallback(async () => {
-    if (!accessToken) return;
+  const fetchFiles = useCallback(async (activeTok?: string) => {
+    const currentTok = activeTok || token;
+    if (!currentTok) return;
     setIsLoading(true);
     setError(null);
     try {
-      const result = await listDriveFiles(accessToken, searchQuery);
+      const result = await listDriveFiles(currentTok, searchQuery);
       setFiles(result);
     } catch (err) {
       setError(
@@ -55,22 +55,55 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, searchQuery]);
+  }, [token, searchQuery]);
 
   useEffect(() => {
-    if (isOpen && accessToken) {
+    if (isOpen && token) {
       fetchFiles();
     }
-  }, [isOpen, accessToken, fetchFiles]);
+  }, [isOpen, token, fetchFiles]);
 
   if (!isOpen) return null;
 
+  const handleAuthorizeDrive = async () => {
+    setIsAuthorizing(true);
+    setError(null);
+    try {
+      const newToken = await requestWorkspaceToken();
+      if (newToken) {
+        setToken(newToken);
+        await fetchFiles(newToken);
+      } else {
+        setError("L'autorisation Google Drive a été annulée.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec d'autorisation Google Workspace");
+    } finally {
+      setIsAuthorizing(false);
+    }
+  };
+
+  const handleLocalFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        onSelectContent(content, file.name);
+        onClose();
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleImport = async (file: DriveFile) => {
-    if (!accessToken) return;
+    if (!token) return;
     setIsImporting(file.id);
     setError(null);
     try {
-      const text = await getDriveFileContent(accessToken, file);
+      const text = await getDriveFileContent(token, file);
       if (!text || text.trim().length === 0) {
         throw new Error("Le fichier sélectionné est vide ou illisible.");
       }
@@ -118,17 +151,17 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white border border-[#D1CEC7] w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-white border border-[#D1CEC7] w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#D1CEC7] bg-[#F1EFE9] flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <HardDrive className="w-5 h-5 text-[#1A1A1A]" />
             <div>
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                Importer depuis Google Drive
+                Importer des Signaux &amp; Documents
               </h2>
               <p className="text-[11px] text-neutral-500 font-serif italic">
-                Sélectionnez un document, une note de veille ou un fichier texte
+                Chargez un fichier local ou connectez Google Drive
               </p>
             </div>
           </div>
@@ -141,33 +174,74 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 flex-1 overflow-y-auto space-y-4 bg-[#F9F8F6]">
-          {!accessToken || !currentUser ? (
-            <div className="text-center py-12 px-4 space-y-4 bg-white border border-[#D1CEC7] p-8">
-              <HardDrive className="w-12 h-12 mx-auto text-neutral-400" />
-              <div className="max-w-md mx-auto">
-                <h3 className="font-serif italic text-xl text-[#1A1A1A] mb-2">
-                  Connexion Google Drive Requise
-                </h3>
-                <p className="text-xs text-neutral-600 font-serif leading-relaxed mb-6">
-                  Connectez votre compte Google pour accéder à vos documents,
-                  comptes-rendus techniques et flux de veille hébergés sur Google
-                  Drive.
+        <div className="p-6 flex-1 overflow-y-auto space-y-5 bg-[#F9F8F6]">
+          {/* Option A: Direct Local File Upload */}
+          <div className="p-5 bg-white border border-[#D1CEC7] space-y-3">
+            <div className="flex items-center space-x-2 font-mono text-xs font-bold uppercase tracking-wider text-[#1A1A1A]">
+              <FileUp className="w-4 h-4 text-emerald-700" />
+              <span>Option 1 : Charger un fichier direct (.txt, .md, .json, .html)</span>
+            </div>
+            <p className="text-xs text-neutral-600 font-serif">
+              Glissez ou sélectionnez un document depuis votre ordinateur sans aucune permission requise.
+            </p>
+            <label className="inline-flex items-center space-x-2 px-4 py-2.5 bg-[#1A1A1A] hover:bg-neutral-800 text-white font-mono text-xs uppercase tracking-wider font-bold shadow-xs transition-colors cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>Parcourir mes fichiers locaux</span>
+              <input
+                type="file"
+                accept=".txt,.md,.json,.html,.csv,.rtf"
+                onChange={handleLocalFileUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {/* Option B: Google Drive Cloud Connection */}
+          <div className="p-5 bg-white border border-[#D1CEC7] space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E5E2DA] pb-2">
+              <div className="flex items-center space-x-2 font-mono text-xs font-bold uppercase tracking-wider text-[#1A1A1A]">
+                <HardDrive className="w-4 h-4 text-blue-700" />
+                <span>Option 2 : Parcourir Google Drive</span>
+              </div>
+              {token && (
+                <button
+                  onClick={() => fetchFiles()}
+                  disabled={isLoading}
+                  className="px-2.5 py-1 bg-[#F1EFE9] hover:bg-[#E5E2DA] text-[10px] font-mono uppercase font-bold text-[#1A1A1A] flex items-center space-x-1"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoading ? "animate-spin" : ""}`} />
+                  <span>Actualiser</span>
+                </button>
+              )}
+            </div>
+
+            {!token ? (
+              <div className="text-center py-4 space-y-3">
+                <p className="text-xs text-neutral-600 font-serif leading-relaxed">
+                  Autorisez l'accès en lecture à vos documents Google Drive pour les importer directement dans l'éditeur.
                 </p>
                 <button
-                  onClick={onLogin}
-                  className="inline-flex items-center space-x-2 px-5 py-2.5 bg-[#1A1A1A] hover:bg-neutral-800 text-white text-xs uppercase tracking-widest font-bold shadow-xs transition-colors"
+                  onClick={handleAuthorizeDrive}
+                  disabled={isAuthorizing}
+                  className="inline-flex items-center space-x-2 px-4 py-2.5 bg-white hover:bg-[#F1EFE9] border border-[#1A1A1A] text-[#1A1A1A] font-mono text-xs uppercase tracking-wider font-bold shadow-xs transition-colors cursor-pointer"
                 >
-                  <LogIn className="w-4 h-4" />
-                  <span>Se connecter avec Google</span>
+                  {isAuthorizing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-[#c44d2d]" />
+                      <span>Autorisation en cours...</span>
+                    </>
+                  ) : (
+                    <>
+                      <HardDrive className="w-4 h-4 text-blue-600" />
+                      <span>Connecter Google Drive</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
-          ) : (
-            <>
-              {/* Search & Actions Bar */}
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1">
+            ) : (
+              <div className="space-y-3">
+                {/* Search Bar */}
+                <div className="relative">
                   <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
@@ -175,86 +249,49 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && fetchFiles()}
                     placeholder="Rechercher par titre ou mot-clé dans Drive..."
-                    className="w-full bg-white border border-[#D1CEC7] pl-9 pr-4 py-2 text-xs text-[#1A1A1A] placeholder-neutral-400 focus:outline-hidden focus:border-[#1A1A1A]"
+                    className="w-full bg-[#FAF8F5] border border-[#D1CEC7] pl-9 pr-4 py-2 text-xs text-[#1A1A1A] placeholder-neutral-400 focus:outline-hidden focus:border-[#1A1A1A]"
                   />
                 </div>
-                <button
-                  onClick={fetchFiles}
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-white hover:bg-[#F1EFE9] border border-[#D1CEC7] text-xs uppercase tracking-widest font-bold text-[#1A1A1A] flex items-center space-x-1.5 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`}
-                  />
-                  <span className="hidden sm:inline">Actualiser</span>
-                </button>
-              </div>
 
-              {/* Error Alert */}
-              {error && (
-                <div className="p-3 bg-white border-l-4 border-rose-600 text-xs text-rose-800 flex items-start space-x-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {/* File List */}
-              {isLoading ? (
-                <div className="py-16 text-center text-xs text-neutral-500 font-serif italic">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-neutral-400" />
-                  Chargement de vos fichiers Google Drive...
-                </div>
-              ) : files.length === 0 ? (
-                <div className="py-16 text-center text-xs text-neutral-500 font-serif italic bg-white border border-[#D1CEC7] p-8">
-                  <FileText className="w-8 h-8 mx-auto mb-2 opacity-30 text-neutral-400" />
-                  Aucun fichier texte ou document trouvé dans Google Drive.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {files.map((file) => (
-                    <div
-                      key={file.id}
-                      className="p-4 bg-white border border-[#D1CEC7] hover:border-[#1A1A1A] transition-all flex items-center justify-between gap-4"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          {getFileBadge(file.mimeType)}
-                          {file.modifiedTime && (
-                            <span className="text-[10px] text-neutral-500 font-mono">
-                              Modifié le{" "}
-                              {new Date(file.modifiedTime).toLocaleDateString(
-                                "fr-FR"
-                              )}
+                {/* File List */}
+                {isLoading ? (
+                  <div className="py-8 text-center text-xs text-neutral-500 font-serif italic">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-neutral-400" />
+                    Chargement de vos fichiers Drive...
+                  </div>
+                ) : files.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-neutral-500 font-serif italic bg-[#FAF8F5] border border-[#D1CEC7] p-4">
+                    <FileText className="w-6 h-6 mx-auto mb-1 opacity-30 text-neutral-400" />
+                    Aucun fichier texte ou Google Doc trouvé.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {files.map((file) => (
+                      <div
+                        key={file.id}
+                        className="p-3 bg-[#FAF8F5] border border-[#D1CEC7] hover:border-[#1A1A1A] transition-all flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center space-x-2 mb-1">
+                            {getFileBadge(file.mimeType)}
+                            <span className="text-xs font-mono font-bold text-[#1A1A1A] truncate">
+                              {file.name}
                             </span>
-                          )}
+                          </div>
+                          <div className="text-[10px] text-neutral-500 font-mono">
+                            Modifié le {new Date(file.modifiedTime).toLocaleDateString("fr-FR")}
+                          </div>
                         </div>
-                        <h4 className="text-xs font-serif font-bold text-[#1A1A1A] truncate">
-                          {file.name}
-                        </h4>
-                      </div>
-
-                      <div className="flex items-center space-x-2 shrink-0">
-                        {file.webViewLink && (
-                          <a
-                            href={file.webViewLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 text-neutral-400 hover:text-[#1A1A1A] transition-colors"
-                            title="Ouvrir dans Google Drive"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
 
                         <button
                           onClick={() => handleImport(file)}
                           disabled={isImporting === file.id}
-                          className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#1A1A1A] hover:bg-neutral-800 text-white text-[10px] uppercase tracking-widest font-bold shadow-xs transition-colors disabled:opacity-50"
+                          className="px-3 py-1.5 bg-[#1A1A1A] hover:bg-neutral-800 text-white font-mono text-[10px] uppercase tracking-wider font-bold flex items-center space-x-1 transition-colors disabled:opacity-50"
                         >
                           {isImporting === file.id ? (
                             <>
                               <RefreshCw className="w-3 h-3 animate-spin" />
-                              <span>Extraction...</span>
+                              <span>Chargement...</span>
                             </>
                           ) : (
                             <>
@@ -264,24 +301,27 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({
                           )}
                         </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Error Notice */}
+          {error && (
+            <div className="p-3 bg-white border-l-4 border-rose-600 text-xs text-rose-800 flex items-start space-x-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-[#D1CEC7] bg-[#F1EFE9] flex items-center justify-between text-xs">
-          <span className="text-neutral-500 text-[11px] font-mono">
-            {currentUser
-              ? `Connecté en tant que ${currentUser.email}`
-              : "Non connecté à Google Drive"}
-          </span>
+        <div className="px-6 py-3.5 border-t border-[#D1CEC7] bg-[#F1EFE9] flex items-center justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-white hover:bg-[#E5E2DA] border border-[#D1CEC7] text-[10px] uppercase tracking-widest font-bold text-[#1A1A1A] transition-colors"
+            className="px-4 py-2 bg-white hover:bg-[#E5E2DA] border border-[#D1CEC7] text-[10px] uppercase tracking-widest font-bold text-[#1A1A1A] transition-colors"
           >
             Fermer
           </button>

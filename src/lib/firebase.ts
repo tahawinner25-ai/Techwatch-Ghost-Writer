@@ -22,13 +22,10 @@ export const db = getFirestore(
   (firebaseConfig as Record<string, string>).firestoreDatabaseId || "(default)"
 );
 
-// Configure Google Auth Provider with Google Drive & Calendar Scopes
+// Configure Standard Google Auth Provider (Clean Authentication without sensitive Workspace scopes)
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope("https://www.googleapis.com/auth/drive");
-googleProvider.addScope("https://www.googleapis.com/auth/drive.file");
-googleProvider.addScope("https://www.googleapis.com/auth/drive.readonly");
-googleProvider.addScope("https://www.googleapis.com/auth/calendar");
-googleProvider.addScope("https://www.googleapis.com/auth/calendar.events");
+// Use standard profile & email only so login is universally allowed without security blocks
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 // In-Memory Token Cache (Never persist in localStorage for security)
 let cachedAccessToken: string | null = null;
@@ -117,26 +114,41 @@ export const initAuth = (
   });
 };
 
-// Sign in with Google Popup
+// Sign in with Google Popup (Standard clean authentication)
 export const googleSignIn = async (): Promise<{
   user: User;
-  accessToken: string;
+  accessToken: string | null;
 } | null> => {
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, googleProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error("Impossible d'obtenir le jeton d'accès Google Drive");
-    }
-
-    cachedAccessToken = credential.accessToken;
+    cachedAccessToken = credential?.accessToken || null;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error) {
     console.error("Sign in error:", error);
     throw error;
   } finally {
     isSigningIn = false;
+  }
+};
+
+// Request on-demand Google Workspace token for direct Drive upload if desired
+export const requestWorkspaceToken = async (): Promise<string | null> => {
+  try {
+    const workspaceProvider = new GoogleAuthProvider();
+    workspaceProvider.addScope("https://www.googleapis.com/auth/drive.file");
+    workspaceProvider.setCustomParameters({ prompt: "consent" });
+    const result = await signInWithPopup(auth, workspaceProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      cachedAccessToken = credential.accessToken;
+      return credential.accessToken;
+    }
+    return null;
+  } catch (error) {
+    console.warn("Workspace token authorization skipped or cancelled:", error);
+    return null;
   }
 };
 
